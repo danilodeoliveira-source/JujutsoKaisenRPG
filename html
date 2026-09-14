@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jujutsu 8-Bit RPG</title>
+    <style>
+        body {
+            background-color: #0d0d11;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        h1 {
+            color: #a855f7;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px #000;
+        }
+        canvas {
+            border: 4px solid #a855f7;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+            background-color: #050508;
+            image-rendering: pixelated;
+        }
+        .instructions {
+            margin-top: 10px;
+            color: #888;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>JUJUTSU 8-BIT: DOMAIN CHRONICLES</h1>
+    <canvas id="gameCanvas" width="640" height="400"></canvas>
+    <div class="instructions">Clique nos botões na tela para jogar</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// --- DADOS DOS CLÃS ---
+const CLANS = {
+    GOJO: {
+        name: "Clã Gojo",
+        skillName: "Vazio Roxo",
+        domainName: "Vazio Imensurável",
+        hp: 120, energy: 100, atk: 25,
+        passive: "Seis Olhos (Baixo consumo de Energia)"
+    },
+    ZENIN: {
+        name: "Clã Zen'in",
+        skillName: "Invocação de Sombra",
+        domainName: "Jardim das Sombras",
+        hp: 140, energy: 70, atk: 22,
+        passive: "Dez Sombras (Crítico elevado)"
+    },
+    KAMO: {
+        name: "Clã Kamo",
+        skillName: "Perfuração de Sangue",
+        domainName: "Escarlate Absoluto",
+        hp: 160, energy: 60, atk: 20,
+        passive: "Manipulação de Sangue (Alta vida)"
+    },
+    INUMAKI: {
+        name: "Clã Inumaki",
+        skillName: "Fala Amaldiçoada: Pare!",
+        domainName: "Ressoador Supremo",
+        hp: 110, energy: 80, atk: 28,
+        passive: "Fala Amaldiçoada (Atordoamento)"
+    }
+};
+
+// --- ESTADO DO JOGO ---
+let gameState = 'SELECT_CLAN'; // SELECT_CLAN, HUB, BATTLE, SHOP, GAME_OVER
+let logMessage = "Escolha o seu clã para iniciar sua jornada.";
+
+let player = {
+    clanKey: null,
+    clan: null,
+    hp: 100, maxHp: 100,
+    energy: 50, maxEnergy: 50,
+    atk: 20,
+    coins: 0,
+    domainUnlocked: false,
+    domainLevel: 0
+};
+
+let enemy = {
+    name: "Maldição de Nível 3",
+    hp: 80, maxHp: 80,
+    atk: 12,
+    rewardCoins: 50
+};
+
+// --- CONTROLE DE MOUSE ---
+canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    handleClick(x, y);
+});
+
+function handleClick(x, y) {
+    if (gameState === 'SELECT_CLAN') {
+        if (checkBtn(x, y, 50, 120, 250, 50)) selectClan('GOJO');
+        if (checkBtn(x, y, 340, 120, 250, 50)) selectClan('ZENIN');
+        if (checkBtn(x, y, 50, 200, 250, 50)) selectClan('KAMO');
+        if (checkBtn(x, y, 340, 200, 250, 50)) selectClan('INUMAKI');
+    } 
+    else if (gameState === 'HUB') {
+        if (checkBtn(x, y, 220, 150, 200, 40)) startBattle();
+        if (checkBtn(x, y, 220, 210, 200, 40)) gameState = 'SHOP';
+        if (checkBtn(x, y, 220, 270, 200, 40)) rest();
+    } 
+    else if (gameState === 'SHOP') {
+        if (checkBtn(x, y, 170, 220, 300, 40)) buyDomain();
+        if (checkBtn(x, y, 220, 300, 200, 40)) gameState = 'HUB';
+    } 
+    else if (gameState === 'BATTLE') {
+        if (checkBtn(x, y, 50, 310, 160, 40)) playerAttack();
+        if (checkBtn(x, y, 240, 310, 160, 40)) playerSkill();
+        if (checkBtn(x, y, 430, 310, 160, 40)) playerDomain();
+    }
+    else if (gameState === 'GAME_OVER') {
+        if (checkBtn(x, y, 220, 250, 200, 40)) location.reload();
+    }
+}
+
+function checkBtn(x, y, bx, by, bw, bh) {
+    return x >= bx && x <= bx + bw && y >= by && y <= by + bh;
+}
+
+// --- LÓGICA DO JOGO ---
+function selectClan(key) {
+    player.clanKey = key;
+    player.clan = CLANS[key];
+    player.maxHp = player.clan.hp;
+    player.hp = player.clan.hp;
+    player.maxEnergy = player.clan.energy;
+    player.energy = player.clan.energy;
+    player.atk = player.clan.atk;
+    
+    logMessage = `Você escolheu o ${player.clan.name}!`;
+    gameState = 'HUB';
+}
+
+function rest() {
+    player.hp = player.maxHp;
+    player.energy = player.maxEnergy;
+    logMessage = "Você descansou e recuperou sua vida e energia!";
+}
+
+function startBattle() {
+    enemy.hp = enemy.maxHp;
+    gameState = 'BATTLE';
+    logMessage = `Uma ${enemy.name} apareceu! Prepare-se!`;
+}
+
+function playerAttack() {
+    let dmg = player.atk + Math.floor(Math.random() * 5);
+    enemy.hp -= dmg;
+    logMessage = `Você atacou e causou ${dmg} de dano!`;
+    
+    if (enemy.hp <= 0) winBattle();
+    else enemyTurn();
+}
+
+function playerSkill() {
+    let cost = player.clanKey === 'GOJO' ? 15 : 25;
+    if (player.energy < cost) {
+        logMessage = "Energia mística insuficiente!";
+        return;
+    }
+    player.energy -= cost;
+    let dmg = player.atk + 25;
+    enemy.hp -= dmg;
+    logMessage = `Você usou ${player.clan.skillName} e causou ${dmg} de dano!`;
+    
+    if (enemy.hp <= 0) winBattle();
+    else enemyTurn();
+}
+
+function playerDomain() {
+    if (!player.domainUnlocked) {
+        logMessage = "Você ainda não comprou a Expansão de Domínio!";
+        return;
+    }
+    if (player.energy < 40) {
+        logMessage = "Energia mística insuficiente para o Domínio!";
+        return;
+    }
+    player.energy -= 40;
+    let dmg = player.atk + 60 + (player.domainLevel * 20);
+    enemy.hp -= dmg;
+    logMessage = `EXPANSÃO DE DOMÍNIO: ${player.clan.domainName}! Caos absoluto: ${dmg} de dano!`;
+    
+    if (enemy.hp <= 0) winBattle();
+    else enemyTurn();
+}
+
+function enemyTurn() {
+    setTimeout(() => {
+        let dmg = enemy.atk + Math.floor(Math.random() * 5);
+        player.hp -= dmg;
+        logMessage += ` A maldição contra-atacou causando ${dmg} de dano!`;
+        
+        if (player.hp <= 0) {
+            gameState = 'GAME_OVER';
+            logMessage = "Sua energia mística se esgotou... Você foi derrotado!";
+        }
+    }, 400);
+}
+
+function winBattle() {
+    player.coins += enemy.rewardCoins;
+    logMessage = `Você exorcizou a maldição e ganhou ${enemy.rewardCoins} Moedas!`;
+    enemy.maxHp += 20; // Maldições ficam mais fortes
+    enemy.atk += 3;
+    gameState = 'HUB';
+}
+
+function buyDomain() {
+    let cost = player.domainUnlocked ? 150 : 100;
+    if (player.coins >= cost) {
+        player.coins -= cost;
+        if (!player.domainUnlocked) {
+            player.domainUnlocked = true;
+            player.domainLevel = 1;
+            logMessage = "Você desbloqueou sua EXPANSÃO DE DOMÍNIO!";
+        } else {
+            player.domainLevel++;
+            logMessage = `Seu Domínio subiu para o Nível ${player.domainLevel}!`;
+        }
+    } else {
+        logMessage = "Moedas insuficientes!";
+    }
+}
+
+// --- RENDERIZAÇÃO (GRÁFICOS CANVAS 8-BIT) ---
+function drawButton(x, y, w, h, text, color = "#a855f7") {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+    
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "14px 'Courier New'";
+    ctx.textAlign = "center";
+    ctx.fillText(text, x + w / 2, y + h / 2 + 5);
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Borda Retro
+    ctx.strokeStyle = "#333";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(5, 5, canvas.width - 10, canvas.height - 10);
+
+    if (gameState === 'SELECT_CLAN') {
+        ctx.fillStyle = "#a855f7";
+        ctx.font = "20px 'Courier New'";
+        ctx.textAlign = "center";
+        ctx.fillText("SELEÇÃO DE CLÃ", 320, 60);
+
+        drawButton(50, 120, 250, 50, "Clã Gojo");
+        drawButton(340, 120, 250, 50, "Clã Zen'in");
+        drawButton(50, 200, 250, 50, "Clã Kamo");
+        drawButton(340, 200, 250, 50, "Clã Inumaki");
+
+        ctx.fillStyle = "#aaa";
+        ctx.font = "12px 'Courier New'";
+        ctx.fillText(logMessage, 320, 330);
+    } 
+    else if (gameState === 'HUB') {
+        ctx.fillStyle = "#fff";
+        ctx.font = "18px 'Courier New'";
+        ctx.textAlign = "left";
+        ctx.fillText(`Feiticeiro do ${player.clan.name}`, 30, 40);
+        ctx.fillText(`HP: ${player.hp}/${player.maxHp}`, 30, 70);
+        ctx.fillText(`Energia: ${player.energy}/${player.maxEnergy}`, 30, 95);
+        ctx.fillText(`Moedas: ${player.coins}`, 30, 120);
+
+        drawButton(220, 150, 200, 40, "Caçar Maldições", "#22c55e");
+        drawButton(220, 210, 200, 40, "Loja de Domínio", "#eab308");
+        drawButton(220, 270, 200, 40, "Descansar (HP Max)", "#3b82f6");
+
+        ctx.fillStyle = "#a855f7";
+        ctx.font = "13px 'Courier New'";
+        ctx.textAlign = "center";
+        ctx.fillText(logMessage, 320, 360);
+    }
+    else if (gameState === 'SHOP') {
+        ctx.fillStyle = "#eab308";
+        ctx.font = "20px 'Courier New'";
+        ctx.textAlign = "center";
+        ctx.fillText("LOJA DE DOMÍNIO", 320, 50);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "14px 'Courier New'";
+        ctx.fillText(`Suas Moedas: ${player.coins}`, 320, 90);
+        
+        let statusDom = player.domainUnlocked 
+            ? `Domínio Nível ${player.domainLevel} (Upgrade: 150 Moedas)` 
+            : "Desbloquear Domínio (Custo: 100 Moedas)";
+            
+        ctx.fillText(statusDom, 320, 140);
+
+        drawButton(170, 220, 300, 40, player.domainUnlocked ? "Melhorar Domínio" : "Comprar Domínio", "#eab308");
+        drawButton(220, 300, 200, 40, "Voltar", "#6b7280");
+
+        ctx.fillStyle = "#a855f7";
+        ctx.fillText(logMessage, 320, 370);
+    }
+    else if (gameState === 'BATTLE') {
+        // Sprite simplificado do Jogador (Retângulo Roxo 8-bit)
+        ctx.fillStyle = "#a855f7";
+        ctx.fillRect(80, 160, 40, 60);
+        ctx.fillStyle = "#fff";
+        ctx.fillText("Você", 100, 240);
+        ctx.fillText(`HP: ${player.hp}`, 100, 255);
+
+        // Sprite da Maldição (Retângulo Vermelho 8-bit)
+        ctx.fillStyle = "#ef4444";
+        ctx.fillRect(500, 160, 50, 60);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(enemy.name, 525, 240);
+        ctx.fillText(`HP: ${enemy.hp}`, 525, 255);
+
+        // Painel de Ações
+        drawButton(50, 310, 160, 40, "Ataque Físico");
+        drawButton(240, 310, 160, 40, player.clan.skillName, "#3b82f6");
+        drawButton(430, 310, 160, 40, "DOMÍNIO", player.domainUnlocked ? "#eab308" : "#4b5563");
+
+        // Log da Batalha
+        ctx.fillStyle = "#fff";
+        ctx.font = "12px 'Courier New'";
+        ctx.textAlign = "center";
+        ctx.fillText(logMessage, 320, 50);
+    }
+    else if (gameState === 'GAME_OVER') {
+        ctx.fillStyle = "#ef4444";
+        ctx.font = "24px 'Courier New'";
+        ctx.textAlign = "center";
+        ctx.fillText("VOCÊ MORREU", 320, 150);
+        
+        ctx.fillStyle = "#fff";
+        ctx.font = "14px 'Courier New'";
+        ctx.fillText(logMessage, 320, 190);
+
+        drawButton(220, 250, 200, 40, "Tentar Novamente", "#ef4444");
+    }
+
+    requestAnimationFrame(draw);
+}
+
+// Inicia o Loop Principal
+draw();
+</script>
+</body>
+</html>
